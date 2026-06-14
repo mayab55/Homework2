@@ -4,7 +4,6 @@ import java.util.*;
 
 public class LaggedMap<K, V> {
 
-
     private int draftSeconds;
     private Map<K, V> officialMap = new HashMap<>();
     private Map<K, List<Draft<V>>> draftsMap = new HashMap<>();
