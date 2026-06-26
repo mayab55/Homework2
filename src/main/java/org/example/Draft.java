@@ -1,26 +1,33 @@
 package org.example;
 
+import java.util.LinkedList;
+
 public class Draft<V> {
+    private V currentValue;
+    private final LinkedList<V> history = new LinkedList<>();
 
-    private V value;
-    private long publishTime;
-    private boolean isDelete;
-
-    public Draft(V value, boolean isDelete, int draftSeconds) {
-        this.value = value;
-        this.isDelete = isDelete;
-        this.publishTime = System.currentTimeMillis() + (draftSeconds * 1000L);
+    public Draft(V value) {
+        this.currentValue = value;
     }
 
-    public long getPublishTime() {
-        return publishTime;
+    public synchronized V getCurrentValue() {
+        return currentValue;
     }
 
-    public boolean isDelete() {
-        return isDelete;
+    public synchronized void updateValue(V newValue) {
+        if (this.currentValue != null) {
+            history.addFirst(this.currentValue);
+        }
+        this.currentValue = newValue;
     }
 
-    public V getValue() {
-        return value;
+    public synchronized LinkedList<V> getHistory() {
+        return history;
+    }
+
+    public synchronized void rollbackToPrevious() {
+        if (!history.isEmpty()) {
+            this.currentValue = history.removeFirst();
+        }
     }
 }
