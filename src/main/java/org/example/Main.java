@@ -1,8 +1,19 @@
 package org.example;
 
-//TIP To <b>Run</b> code, press <shortcut actionId="Run"/> or
-// click the <icon src="AllIcons.Actions.Execute"/> icon in the gutter.
 public class Main {
     static void main() {
-  }
+        /*
+         * סעיף ח':
+         * בזמן t=2.00s שני threads רצים במקביל: אחד מפרסם את ה-remove, השני קורא ל-abort().
+         * ייתכנו שני תרחישים:
+         *
+         * תרחיש 1 - הפרסום מנצח: המחיקה מתבצעת לפני ש-abort() רץ.
+         * התוצאה: המפתח נמחק (או חוזר לגרסה קודמת אם full=false).
+         *
+         * תרחיש 2 - abort() מנצח: הטיוטה מבוטלת לפני שה-publisher הספיק לרוץ.
+         * התוצאה: המחיקה לא מתבצעת, הערך נשאר כפי שהיה.
+         *
+         * שתי התוצאות אפשריות - הכל תלוי איזה thread יקבל את המעבד ראשון.
+         */
+    }
 }

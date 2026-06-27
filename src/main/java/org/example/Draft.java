@@ -22,25 +22,21 @@ public class Draft<V> {
         this.currentValue = newValue;
     }
 
-    // מחזיר עותק של ההיסטוריה - לא חושף את המבנה הפנימי
     public synchronized List<V> getHistoryCopy() {
         return new LinkedList<>(history);
     }
 
-    // מנגנון ניקוי: מסיר ערכים ישנים מסוף הרשימה
     public synchronized void trimHistory(int maxSize) {
         while (history.size() > maxSize) {
             history.removeLast();
         }
     }
 
-    // משמש ליצירת עותק ב-snapshot וב-rollback
     public synchronized void copyHistoryFrom(List<V> source) {
         history.clear();
         history.addAll(source);
     }
 
-    // אטומי: מבצע rollback אם יש היסטוריה, אחרת מחזיר false (יש למחוק את המפתח)
     public synchronized boolean rollbackOrRemove() {
         if (history.isEmpty()) {
             return false;

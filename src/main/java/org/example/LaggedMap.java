@@ -11,14 +11,12 @@ public class LaggedMap<K, V> {
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(3);
     private volatile Map<K, Draft<V>> snapshotMap = new HashMap<>();
 
-    // סעיף א' - בנאי
     public LaggedMap(int draftSeconds) {
         this.draftSeconds = draftSeconds;
         scheduler.scheduleAtFixedRate(this::cleanExcessHistory, 1, 1, TimeUnit.SECONDS);
         scheduler.scheduleAtFixedRate(this::createSnapshot, 1, 1, TimeUnit.MINUTES);
     }
 
-    // סעיף ב' - put
     public void put(K key, V value) {
         ScheduledFuture<?> futureTask = scheduler.schedule(() -> {
             publishedMap.compute(key, (k, currentDraft) -> {
@@ -35,13 +33,11 @@ public class LaggedMap<K, V> {
         pendingDrafts.computeIfAbsent(key, k -> new CopyOnWriteArrayList<>()).add(futureTask);
     }
 
-    // סעיף ג' - get
     public V get(K key) {
         Draft<V> draft = publishedMap.get(key);
         return draft != null ? draft.getCurrentValue() : null;
     }
 
-    // סעיף ד' - abort
     public void abort() {
         for (K key : new ArrayList<>(pendingDrafts.keySet())) {
             List<ScheduledFuture<?>> futures = pendingDrafts.remove(key);
@@ -53,15 +49,12 @@ public class LaggedMap<K, V> {
         }
     }
 
-    // סעיף ה' - ניקוי היסטוריה עודפת (רץ בכל שנייה)
-    // הסנכרון מטופל בתוך trimHistory - אין צורך ב-synchronized(draft) כאן
     private void cleanExcessHistory() {
         for (Draft<V> draft : publishedMap.values()) {
             draft.trimHistory(3);
         }
     }
 
-    // סעיף ו' - remove
     public void remove(K key, boolean full) {
         ScheduledFuture<?> futureTask = scheduler.schedule(() -> {
             if (full) {
@@ -78,7 +71,6 @@ public class LaggedMap<K, V> {
         pendingDrafts.computeIfAbsent(key, k -> new CopyOnWriteArrayList<>()).add(futureTask);
     }
 
-    // סעיף ז' - יצירת snapshot (רץ בכל דקה)
     private synchronized void createSnapshot() {
         Map<K, Draft<V>> newSnapshot = new HashMap<>();
         for (Map.Entry<K, Draft<V>> entry : publishedMap.entrySet()) {
@@ -90,7 +82,6 @@ public class LaggedMap<K, V> {
         snapshotMap = newSnapshot;
     }
 
-    // סעיף ז' - rollback
     public synchronized void rollback() {
         abort();
         publishedMap.clear();
