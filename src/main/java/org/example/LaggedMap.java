@@ -9,19 +9,18 @@ public class LaggedMap<K, V> {
     private final ConcurrentHashMap<K, Draft<V>> publishedMap = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<K, List<ScheduledFuture<?>>> pendingDrafts = new ConcurrentHashMap<>();
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(3);
-    private Map<K, Draft<V>> snapshotMap = new HashMap<>();
-    private volatile boolean abortFlag = false;
+    private volatile Map<K, Draft<V>> snapshotMap = new HashMap<>();
 
+    // סעיף א' - בנאי
     public LaggedMap(int draftSeconds) {
         this.draftSeconds = draftSeconds;
         scheduler.scheduleAtFixedRate(this::cleanExcessHistory, 1, 1, TimeUnit.SECONDS);
         scheduler.scheduleAtFixedRate(this::createSnapshot, 1, 1, TimeUnit.MINUTES);
     }
 
+    // סעיף ב' - put
     public void put(K key, V value) {
         ScheduledFuture<?> futureTask = scheduler.schedule(() -> {
-            if (abortFlag) return;
-
             publishedMap.compute(key, (k, currentDraft) -> {
                 if (currentDraft == null) {
                     return new Draft<>(value);
@@ -36,15 +35,15 @@ public class LaggedMap<K, V> {
         pendingDrafts.computeIfAbsent(key, k -> new CopyOnWriteArrayList<>()).add(futureTask);
     }
 
+    // סעיף ג' - get
     public V get(K key) {
         Draft<V> draft = publishedMap.get(key);
         return draft != null ? draft.getCurrentValue() : null;
     }
 
+    // סעיף ד' - abort
     public void abort() {
-        abortFlag = true;
-
-        for (K key : pendingDrafts.keySet()) {
+        for (K key : new ArrayList<>(pendingDrafts.keySet())) {
             List<ScheduledFuture<?>> futures = pendingDrafts.remove(key);
             if (futures != null) {
                 for (ScheduledFuture<?> future : futures) {
@@ -54,33 +53,23 @@ public class LaggedMap<K, V> {
         }
     }
 
+    // סעיף ה' - ניקוי היסטוריה עודפת (רץ בכל שנייה)
+    // הסנכרון מטופל בתוך trimHistory - אין צורך ב-synchronized(draft) כאן
     private void cleanExcessHistory() {
-        for (Map.Entry<K, Draft<V>> entry : publishedMap.entrySet()) {
-            Draft<V> draft = entry.getValue();
-            synchronized (draft) {
-                while (draft.getHistory().size() > 3) {
-                    draft.getHistory().removeLast();
-                }
-            }
+        for (Draft<V> draft : publishedMap.values()) {
+            draft.trimHistory(3);
         }
     }
 
+    // סעיף ו' - remove
     public void remove(K key, boolean full) {
         ScheduledFuture<?> futureTask = scheduler.schedule(() -> {
-            if (abortFlag) return;
-
             if (full) {
                 publishedMap.remove(key);
             } else {
                 Draft<V> draft = publishedMap.get(key);
-                if (draft != null) {
-                    synchronized (draft) {
-                        if (draft.getHistory().isEmpty()) {
-                            publishedMap.remove(key);
-                        } else {
-                            draft.rollbackToPrevious();
-                        }
-                    }
+                if (draft != null && !draft.rollbackOrRemove()) {
+                    publishedMap.remove(key);
                 }
             }
             cleanUpPendingDraftRef(key);
@@ -89,26 +78,27 @@ public class LaggedMap<K, V> {
         pendingDrafts.computeIfAbsent(key, k -> new CopyOnWriteArrayList<>()).add(futureTask);
     }
 
+    // סעיף ז' - יצירת snapshot (רץ בכל דקה)
     private synchronized void createSnapshot() {
-        snapshotMap = new HashMap<>();
+        Map<K, Draft<V>> newSnapshot = new HashMap<>();
         for (Map.Entry<K, Draft<V>> entry : publishedMap.entrySet()) {
-            Draft<V> originalDraft = entry.getValue();
-            synchronized (originalDraft) {
-                Draft<V> clonedDraft = new Draft<>(originalDraft.getCurrentValue());
-                clonedDraft.getHistory().addAll(originalDraft.getHistory());
-                snapshotMap.put(entry.getKey(), clonedDraft);
-            }
+            Draft<V> original = entry.getValue();
+            Draft<V> clone = new Draft<>(original.getCurrentValue());
+            clone.copyHistoryFrom(original.getHistoryCopy());
+            newSnapshot.put(entry.getKey(), clone);
         }
+        snapshotMap = newSnapshot;
     }
 
+    // סעיף ז' - rollback
     public synchronized void rollback() {
         abort();
         publishedMap.clear();
         for (Map.Entry<K, Draft<V>> entry : snapshotMap.entrySet()) {
-            Draft<V> originalDraft = entry.getValue();
-            Draft<V> clonedDraft = new Draft<>(originalDraft.getCurrentValue());
-            clonedDraft.getHistory().addAll(originalDraft.getHistory());
-            publishedMap.put(entry.getKey(), clonedDraft);
+            Draft<V> original = entry.getValue();
+            Draft<V> clone = new Draft<>(original.getCurrentValue());
+            clone.copyHistoryFrom(original.getHistoryCopy());
+            publishedMap.put(entry.getKey(), clone);
         }
     }
 
